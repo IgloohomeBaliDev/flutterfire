@@ -7,6 +7,7 @@ package io.flutter.plugins.firebasemessaging;
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -142,25 +143,43 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
     builder.setContentTitle(messageObject.optString("title"));
     builder.setContentText(messageObject.optString("body"));
     builder.setSmallIcon(this.getApplicationInfo().icon);
-    if(remoteMessage.getData().containsKey("action")){
+    builder.setAutoCancel(true);
+    if(remoteMessage.getData().containsKey("actions")){
       try {
-        JSONArray actions = messageObject.getJSONArray("action");
+        String actionsOject = messageObject.optString("actions");
+          Log.d(C_TAG, actionsOject);
+        JSONArray actions = new JSONArray(actionsOject);
         for(int i = 0; i< actions.length(); i++){
           Log.d(C_TAG, messageObject.toString());
-          Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("igloohome://handleEkeyRequest/"+messageObject.getString("payload")));
-          PendingIntent pendingIntent = PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_ONE_SHOT);
           JSONObject actionObject = actions.getJSONObject(i);
-          int icon = getIconFromDrawable(actionObject.optString("icon"));
-          builder.addAction(new NotificationCompat.Action.Builder(icon, actionObject.getString("title"), pendingIntent).build());
+          String action = actionObject.optString("title");
+          if(action.equals("ACCEPT" ) && messageObject.optString("id").equals("5")){
+              Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("igloohome://handleEkeyRequest/"+messageObject.getString("payload")+"/direct"));
+              PendingIntent pendingIntent = PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_ONE_SHOT);
+              int icon = getIconFromDrawable(actionObject.optString("icon"));
+              builder.addAction(new NotificationCompat.Action.Builder(icon, action, pendingIntent).build());
+          }else if(action.equals("REJECT")){
+              Intent notificationIntent = new Intent();
+              PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0 );
+              int icon = getIconFromDrawable(actionObject.optString("icon"));
+              builder.addAction(new NotificationCompat.Action.Builder(icon, action, pendingIntent).build());
+          }
         }
       } catch (JSONException e) {
         e.printStackTrace();
       }
     }
-    Notification notification = builder.build();
-    NotificationManager notificationManager = (NotificationManager)
-            this.getSystemService(Context.NOTIFICATION_SERVICE);
-    notificationManager.notify(1, notification);
+      NotificationManager notificationManager = (NotificationManager) this.getSystemService(Context.NOTIFICATION_SERVICE);
+      int notificationId = 1;
+      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+          String channelId = "channel-01";
+          String channelName = "Channel Name";
+          int importance = NotificationManager.IMPORTANCE_HIGH;
+          NotificationChannel mChannel = new NotificationChannel(
+                  channelId, channelName, importance);
+          notificationManager.createNotificationChannel(mChannel);
+      }
+      notificationManager.notify(notificationId, builder.build());
   }
 
   int getIconFromDrawable(String name){
