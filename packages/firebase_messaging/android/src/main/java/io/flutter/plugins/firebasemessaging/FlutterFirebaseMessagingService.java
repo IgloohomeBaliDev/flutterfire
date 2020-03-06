@@ -6,21 +6,36 @@ package io.flutter.plugins.firebasemessaging;
 
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Process;
 import android.util.Log;
+
+import androidx.core.app.NotificationCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.PluginRegistry;
 import io.flutter.view.FlutterCallbackInformation;
 import io.flutter.view.FlutterMain;
 import io.flutter.view.FlutterNativeView;
 import io.flutter.view.FlutterRunArguments;
+
+
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -60,6 +75,7 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
   private static PluginRegistry.PluginRegistrantCallback pluginRegistrantCallback;
 
   private static final String TAG = "FlutterFcmService";
+  private static final String C_TAG = "FCM custom notif";
 
   private static Context backgroundContext;
 
@@ -113,6 +129,49 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
           Log.i(TAG, "Exception waiting to execute Dart callback", ex);
         }
       }
+     // RemoteMessage message = new RemoteMessage()
+      handleBackgroundNotification(remoteMessage);
+    }
+  }
+
+  void handleBackgroundNotification(RemoteMessage remoteMessage){
+    Log.d(C_TAG, remoteMessage.toString());
+    Map<String, String> message = remoteMessage.getData();
+    JSONObject messageObject = new JSONObject(message);
+    NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "1");
+    builder.setContentTitle(messageObject.optString("title"));
+    builder.setContentText(messageObject.optString("body"));
+    builder.setSmallIcon(this.getApplicationInfo().icon);
+    if(remoteMessage.getData().containsKey("action")){
+      try {
+        JSONArray actions = messageObject.getJSONArray("action");
+        for(int i = 0; i< actions.length(); i++){
+          Log.d(C_TAG, messageObject.toString());
+          Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("igloohome://handleEkeyRequest/"+messageObject.getString("payload")));
+          PendingIntent pendingIntent = PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_ONE_SHOT);
+          JSONObject actionObject = actions.getJSONObject(i);
+          int icon = getIconFromDrawable(actionObject.optString("icon"));
+          builder.addAction(new NotificationCompat.Action.Builder(icon, actionObject.getString("title"), pendingIntent).build());
+        }
+      } catch (JSONException e) {
+        e.printStackTrace();
+      }
+    }
+    Notification notification = builder.build();
+    NotificationManager notificationManager = (NotificationManager)
+            this.getSystemService(Context.NOTIFICATION_SERVICE);
+    notificationManager.notify(1, notification);
+  }
+
+  int getIconFromDrawable(String name){
+    try {
+      Class res = R.drawable.class;
+      Field field = res.getField(name);
+      return field.getInt(null);
+    }
+    catch (Exception e) {
+      Log.e(C_TAG, "Failed to get drawable id from name "+name, e);
+      return 0;
     }
   }
 
