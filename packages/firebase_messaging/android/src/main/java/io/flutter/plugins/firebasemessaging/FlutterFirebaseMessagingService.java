@@ -5,6 +5,7 @@ package io.flutter.plugins.firebasemessaging;
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
 import android.app.NotificationChannel;
+import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.ComponentName;
@@ -141,16 +142,20 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
     int actionRequestCode = getID() + 2;
     void handleBackgroundNotification(RemoteMessage remoteMessage) {
 //    int notificationId = getID();
+        String GROUP_PUSH_NOTIFICATION = "com.android.example.PUSH_NOTIFICATION";
+        String groupId = "push_notification";
+        String groupName = "Push Notification";
         Log.d(C_TAG, remoteMessage.toString());
         Log.d(C_TAG, "onMessageReceived id: " + getID());
         Map<String, String> message = remoteMessage.getData();
         JSONObject messageObject = new JSONObject(message);
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "1");
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "noti_push_app_1");
         builder.setContentTitle(messageObject.optString("title"));
         builder.setContentText(messageObject.optString("body"));
         builder.setContentIntent(getPendingIntent(remoteMessage, notificationId));
         builder.setSmallIcon(this.getApplicationInfo().icon);
         builder.setAutoCancel(true);
+        builder.setGroup(groupId);
         if (remoteMessage.getData().containsKey("actions")) {
             try {
                 String actionsOject = messageObject.optString("actions");
@@ -180,11 +185,12 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
 
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            String channelId = "channel-01";
-            String channelName = "Channel Name";
+            String channelId = "noti_push_app_1";
+            String channelName = "noti_push_app";
             int importance = NotificationManager.IMPORTANCE_HIGH;
             NotificationChannel mChannel = new NotificationChannel(
                     channelId, channelName, importance);
+            notificationManager.createNotificationChannelGroup(new NotificationChannelGroup(groupId, groupName));
             notificationManager.createNotificationChannel(mChannel);
         }
         notificationManager.notify(notificationId, builder.build());
