@@ -4,6 +4,7 @@
 package io.flutter.plugins.firebasemessaging;
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
@@ -13,9 +14,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Process;
+import android.renderscript.RenderScript;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -34,6 +37,7 @@ import io.flutter.view.FlutterRunArguments;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -137,22 +141,24 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
         return c.incrementAndGet();
     }
     private static final String CLICK_ACTION_VALUE = "FLUTTER_NOTIFICATION_CLICK";
-    int notificationId = (int) System.currentTimeMillis();
-    int bodyRequestCode = getID();
-    int actionRequestCode = getID() + 2;
+    String currentTimeInMillis = Long.toString(System.currentTimeMillis());
+    //    int notificationId = (int) System.currentTimeMillis() % 10000;
     void handleBackgroundNotification(RemoteMessage remoteMessage) {
-//    int notificationId = getID();
+        int notificationId = (int) System.currentTimeMillis();
+        int bodyNotificationId = getID();
         String GROUP_PUSH_NOTIFICATION = "com.android.example.PUSH_NOTIFICATION";
         String groupId = "push_notification";
         String groupName = "Push Notification";
         Log.d(C_TAG, remoteMessage.toString());
-        Log.d(C_TAG, "onMessageReceived id: " + getID());
+        Log.d(C_TAG, "onMessageReceived id: " + notificationId);
         Map<String, String> message = remoteMessage.getData();
         JSONObject messageObject = new JSONObject(message);
+        int summaryIcon = getIconFromDrawable(messageObject.optString("@mipmap/ic_launcher"));
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "noti_push_app_1");
         builder.setContentTitle(messageObject.optString("title"));
         builder.setContentText(messageObject.optString("body"));
-        builder.setContentIntent(getPendingIntent(remoteMessage, notificationId));
+        builder.setContentIntent(getPendingIntent(remoteMessage, notificationId, bodyNotificationId));
         builder.setSmallIcon(this.getApplicationInfo().icon);
         builder.setAutoCancel(true);
         builder.setGroup(groupId);
@@ -173,7 +179,10 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
                         builder.addAction(new NotificationCompat.Action.Builder(icon, action, pendingIntent).build());
                     } else {
                         int icon = getIconFromDrawable(actionObject.optString("@mipmap/ic_launcher"));
+                        Log.d("ICON", actionObject.optString("@mipmap/ic_launcher"));
                         Log.d("NOTIFICATION_ID", Integer.toString(notificationId));
+                        Log.d("currentTimeMillis", currentTimeInMillis);
+
                         builder.addAction(new NotificationCompat.Action.Builder(icon, action, getActionPendingIntent(remoteMessage, notificationId)).build());
                     }
                 }
@@ -192,11 +201,30 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
                     channelId, channelName, importance);
             notificationManager.createNotificationChannelGroup(new NotificationChannelGroup(groupId, groupName));
             notificationManager.createNotificationChannel(mChannel);
-        }
-        notificationManager.notify(notificationId, builder.build());
-//    notificationManager
 
+        }
+
+        Notification summaryNotification =
+                new NotificationCompat.Builder(this, "noti_push_app_1")
+                        .setContentTitle(messageObject.optString("title"))
+                        //set content text to support devices running API level < 24
+                        .setContentText("Two new messages")
+                        //build summary info into InboxStyle template
+                        .setStyle(new NotificationCompat.InboxStyle())
+                        //specify which group this notification belongs to
+                        .setGroup(groupId)
+                        .setPriority(NotificationCompat.PRIORITY_MIN)
+                        //set this notification as the summary for the group
+                        .setGroupSummary(true)
+                        .setSmallIcon(R.drawable.common_google_signin_btn_icon_dark)
+                        .build();
+
+        notificationManager.notify(notificationId, builder.build());
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            notificationManager.notify(0, summaryNotification);
+        }
     }
+
     PendingIntent getActionPendingIntent(RemoteMessage remoteMessage, int notifId) {
         Log.d("notifId", Integer.toString(notifId));
         RemoteMessage message = new RemoteMessage.Builder("message from server")
@@ -212,10 +240,10 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
                 getApplicationContext(),
                 notifId,
                 launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                0);
     }
 
-    PendingIntent getPendingIntent(RemoteMessage remoteMessage, int notifId) {
+    PendingIntent getPendingIntent(RemoteMessage remoteMessage, int notifId, int bodyResponse) {
         String packageName = getApplication().getPackageName();
         Log.d("the package is : ", packageName);
         RemoteMessage message = new RemoteMessage.Builder("message from server")
@@ -228,9 +256,9 @@ public class FlutterFirebaseMessagingService extends FirebaseMessagingService {
         launchIntent.setAction(CLICK_ACTION_VALUE);
         return PendingIntent.getActivity(
                 getApplicationContext(),
-                2,
+                bodyResponse,
                 launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                0);
     }
     int getIconFromDrawable(String name) {
         try {
