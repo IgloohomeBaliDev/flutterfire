@@ -1,9 +1,9 @@
 // Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
-package io.flutter.plugins.firebasemessaging;
-
+​
+        package io.flutter.plugins.firebasemessaging;
+        ​
 import android.app.Activity;
 import android.app.NotificationManager;
 import android.app.Service;
@@ -11,6 +11,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import androidx.annotation.NonNull;
@@ -37,36 +38,37 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-
+​
 /** FirebaseMessagingPlugin */
 public class FirebaseMessagingPlugin extends BroadcastReceiver
         implements MethodCallHandler, NewIntentListener, FlutterPlugin, ActivityAware {
-
+​
   private static final String CLICK_ACTION_VALUE = "FLUTTER_NOTIFICATION_CLICK";
+  private static final String ACTION_CLICK_VALUE = "actionClick";
   private static final String TAG = "FirebaseMessagingPlugin";
-
+​
   private MethodChannel channel;
   private Context applicationContext;
   private Activity mainActivity;
-
+​
   public static void registerWith(Registrar registrar) {
     FirebaseMessagingPlugin instance = new FirebaseMessagingPlugin();
     instance.setActivity(registrar.activity());
     registrar.addNewIntentListener(instance);
     instance.onAttachedToEngine(registrar.context(), registrar.messenger());
   }
-
+​
   private void onAttachedToEngine(Context context, BinaryMessenger binaryMessenger) {
     this.applicationContext = context;
     FirebaseApp.initializeApp(applicationContext);
     channel = new MethodChannel(binaryMessenger, "plugins.flutter.io/firebase_messaging");
     final MethodChannel backgroundCallbackChannel =
             new MethodChannel(binaryMessenger, "plugins.flutter.io/firebase_messaging_background");
-
+​
     channel.setMethodCallHandler(this);
     backgroundCallbackChannel.setMethodCallHandler(this);
     FlutterFirebaseMessagingService.setBackgroundChannel(backgroundCallbackChannel);
-
+​
     // Register broadcast receiver
     IntentFilter intentFilter = new IntentFilter();
     intentFilter.addAction(FlutterFirebaseMessagingService.ACTION_TOKEN);
@@ -74,52 +76,52 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
     LocalBroadcastManager manager = LocalBroadcastManager.getInstance(applicationContext);
     manager.registerReceiver(this, intentFilter);
   }
-
+​
   private void setActivity(Activity flutterActivity) {
     this.mainActivity = flutterActivity;
   }
-
+​
   @Override
   public void onAttachedToEngine(FlutterPluginBinding binding) {
     onAttachedToEngine(binding.getApplicationContext(), binding.getBinaryMessenger());
   }
-
+​
   @Override
   public void onDetachedFromEngine(FlutterPluginBinding binding) {
     LocalBroadcastManager.getInstance(binding.getApplicationContext()).unregisterReceiver(this);
   }
-
+​
   @Override
   public void onAttachedToActivity(ActivityPluginBinding binding) {
     binding.addOnNewIntentListener(this);
     this.mainActivity = binding.getActivity();
   }
-
+​
   @Override
   public void onDetachedFromActivityForConfigChanges() {
     this.mainActivity = null;
   }
-
+​
   @Override
   public void onReattachedToActivityForConfigChanges(ActivityPluginBinding binding) {
     binding.addOnNewIntentListener(this);
     this.mainActivity = binding.getActivity();
   }
-
+​
   @Override
   public void onDetachedFromActivity() {
     this.mainActivity = null;
   }
-
+​
   // BroadcastReceiver implementation.
   @Override
   public void onReceive(Context context, Intent intent) {
     String action = intent.getAction();
-
+​
     if (action == null) {
       return;
     }
-
+​
     if (action.equals(FlutterFirebaseMessagingService.ACTION_TOKEN)) {
       String token = intent.getStringExtra(FlutterFirebaseMessagingService.EXTRA_TOKEN);
       channel.invokeMethod("onToken", token);
@@ -130,26 +132,26 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
       channel.invokeMethod("onMessage", content);
     }
   }
-
+​
   @NonNull
   private Map<String, Object> parseRemoteMessage(RemoteMessage message) {
     Map<String, Object> content = new HashMap<>();
     content.put("data", message.getData());
-
+​
     RemoteMessage.Notification notification = message.getNotification();
-
+​
     Map<String, Object> notificationMap = new HashMap<>();
-
+​
     String title = notification != null ? notification.getTitle() : null;
     notificationMap.put("title", title);
-
+​
     String body = notification != null ? notification.getBody() : null;
     notificationMap.put("body", body);
-
+​
     content.put("notification", notificationMap);
     return content;
   }
-
+​
   @Override
   public void onMethodCall(final MethodCall call, final Result result) {
     /*  Even when the app is not active the `FirebaseMessagingService` extended by
@@ -248,7 +250,7 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
                             result.success(null);
                             return;
                           }
-
+​
                           result.success(task.getResult().getToken());
                         }
                       });
@@ -293,7 +295,7 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
       result.notImplemented();
     }
   }
-
+​
   @Override
   public boolean onNewIntent(Intent intent) {
     boolean res = sendMessageFromIntent("onResume", intent);
@@ -302,36 +304,46 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
     }
     return res;
   }
-
+​
   /** @return true if intent contained a message to send. */
   private boolean sendMessageFromIntent(String method, Intent intent) {
-    if (intent.getExtras().getString("actionClick").equals("ACCEPT") ){
-      NotificationManager notificationManager = (NotificationManager) applicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
-      notificationManager.cancel(Integer.parseInt(intent.getExtras().getString("notifId")));
-    }
-
+    NotificationManager notificationManager = (NotificationManager) this.applicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+​
     if (CLICK_ACTION_VALUE.equals(intent.getAction())
             || CLICK_ACTION_VALUE.equals(intent.getStringExtra("click_action"))) {
+      Log.d("ACTION_CLICK", intent.getExtras().getString("notifId"));
+​
+      notificationManager.cancel(Integer.parseInt(intent.getExtras().getString("notifId")));
+​
+      if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        int activeNotifications = notificationManager.getActiveNotifications().length;
+        Log.d("activeNotifications", Integer.toString(activeNotifications));
+        if (activeNotifications == 1) {
+          notificationManager.cancel(0);
+        }
+      }
+​
+​
       Map<String, Object> message = new HashMap<>();
       Bundle extras = intent.getExtras();
-
+​
       if (extras == null) {
         return false;
       }
-
+​
       Map<String, Object> notificationMap = new HashMap<>();
       Map<String, Object> dataMap = new HashMap<>();
-
+​
       for (String key : extras.keySet()) {
         Object extra = extras.get(key);
         if (extra != null) {
           dataMap.put(key, extra);
         }
       }
-
+​
       message.put("notification", notificationMap);
       message.put("data", dataMap);
-
+​
       channel.invokeMethod(method, message);
       return true;
     }
